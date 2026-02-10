@@ -1,5 +1,8 @@
 # CCGX Exporter
 
+[![CI](https://github.com/tom-da-costa/ccgx_exporter/actions/workflows/ci.yml/badge.svg)](https://github.com/tom-da-costa/ccgx_exporter/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+
 Deux outils Python pour interagir avec un **Victron Color Control GX (CCGX)** via son broker MQTT local :
 
 | Script | Rôle |
@@ -24,9 +27,28 @@ Les données sont lues en temps réel depuis le broker MQTT embarqué du CCGX (`
 ## Installation
 
 ```bash
-git clone <repo>
+git clone https://github.com/tom-da-costa/ccgx_exporter.git
 cd ccgx_exporter
 uv sync
+```
+
+---
+
+## Docker
+
+L'image est publiée automatiquement sur le GitHub Container Registry à chaque push sur `master` et à chaque tag `v*`.
+
+```bash
+# Dernière version stable
+docker pull ghcr.io/tom-da-costa/ccgx_exporter:latest
+
+# Exporter Prometheus
+docker run -p 9877:9877 ghcr.io/tom-da-costa/ccgx_exporter:latest --host 192.168.1.210
+
+# API HTTP (surcharge l'entrypoint)
+docker run -p 4756:4756 --entrypoint uv \
+  ghcr.io/tom-da-costa/ccgx_exporter:latest \
+  run api_server.py --host 192.168.1.210
 ```
 
 ---
@@ -38,7 +60,7 @@ Souscrit au MQTT du CCGX et expose les métriques Prometheus sur `/metrics`.
 ### Lancement
 
 ```bash
-uv run python main.py --host 192.168.1.210
+uv run main.py --host 192.168.1.210
 ```
 
 ### Options
@@ -84,7 +106,7 @@ Souscrit au MQTT du CCGX et expose la dernière valeur connue de chaque topic vi
 ### Lancement
 
 ```bash
-uv run python api_server.py --host 192.168.1.210
+uv run api_server.py --host 192.168.1.210
 ```
 
 ### Options
@@ -154,6 +176,24 @@ curl http://localhost:4756/portals
 
 ---
 
+## CI/CD
+
+Le pipeline GitHub Actions (`.github/workflows/ci.yml`) s'exécute à chaque push sur `master` et sur les pull requests :
+
+1. **Lint** — `ruff check` + `ruff format --check`
+2. **Tests** — `pytest` avec coverage ≥ 90 %
+3. **Build & Push** — construit l'image Docker et la pousse sur `ghcr.io` (skippé sur les PRs)
+
+### Tags Docker publiés
+
+| Événement | Tags |
+|---|---|
+| Push sur `master` | `latest`, `master`, `sha-<commit>` |
+| Tag `v1.2.3` | `1.2.3`, `1.2`, `sha-<commit>` |
+| Pull request | build uniquement, pas de push |
+
+---
+
 ## Structure du projet
 
 ```
@@ -163,10 +203,23 @@ collector.py       Collecteur Prometheus custom (thread-safe)
 mqtt_client.py     Client MQTT avec keepalive automatique
 metrics.py         Mapping topics D-Bus → définitions Prometheus (217 métriques)
 pyproject.toml     Dépendances (paho-mqtt, prometheus-client)
-base/
-  topics.go                  Mapping original (Go)
-  victron_list_topics.py     Script de découverte des topics
+Dockerfile         Image Docker basée sur uv
+.github/
+  workflows/
+    ci.yml         Pipeline CI/CD GitHub Actions
+tests/
+  test_collector.py
+  test_mqtt_client.py
+  test_metrics.py
+  test_api_server.py
+  test_main.py
 ```
+
+---
+
+## Licence
+
+Apache 2.0 — voir [LICENSE](LICENSE).
 
 ---
 
