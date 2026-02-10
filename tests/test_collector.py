@@ -75,12 +75,20 @@ class TestUpdate:
     def test_unknown_suffix_is_ignored(self):
         c = CCGXCollector()
         c.update("p", "system", "0", "Unknown/Path/That/Does/Not/Exist", 1.0)
-        assert list(c.collect()) == []
+        families = list(c.collect())
+        # Only internal metrics, no Victron data families
+        victron_families = [
+            f for f in families if not f.name.startswith("victron_mqtt_")
+        ]
+        assert victron_families == []
 
     def test_known_suffix_is_stored(self):
         c = CCGXCollector()
         c.update("p", "system", "0", "Dc/Battery/Voltage", 25.0)
-        assert len(list(c.collect())) == 1
+        victron_families = [
+            f for f in c.collect() if not f.name.startswith("victron_mqtt_")
+        ]
+        assert len(victron_families) == 1
 
     def test_value_is_overwritten_by_latest(self):
         c = CCGXCollector()
@@ -108,8 +116,10 @@ class TestUpdate:
         c = CCGXCollector()
         c.update("p", "system", "0", "Dc/Battery/Voltage", 24.0)
         c.update("p", "system", "0", "Dc/Battery/Soc", 85.0)
-        families = list(c.collect())
-        assert len(families) == 2
+        victron_families = [
+            f for f in c.collect() if not f.name.startswith("victron_mqtt_")
+        ]
+        assert len(victron_families) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -124,8 +134,8 @@ class TestLabels:
         samples = samples_by_name(c, "victron_dc_battery_voltage_volts")
         labels = samples[0].labels
         assert labels["portal_id"] == "myportal"
-        assert labels["service"] == "system"
-        assert labels["instance"] == "0"
+        assert labels["component_type"] == "system"
+        assert labels["component_id"] == "0"
 
     def test_fixed_label_phase(self):
         c = CCGXCollector()
@@ -161,21 +171,30 @@ class TestLabels:
         samples = samples_by_name(c, "victron_alarm")
         assert samples[0].labels["alarm"] == "LowBattery"
 
-    def test_phase_alarm_has_phase_label(self):
+    def test_alarm_has_no_phase_label(self):
+        c = CCGXCollector()
+        c.update("p", "vebus", "257", "Alarms/LowBattery", 1.0)
+        samples = samples_by_name(c, "victron_alarm")
+        assert "phase" not in samples[0].labels
+
+    def test_phase_alarm_is_separate_metric(self):
         c = CCGXCollector()
         c.update("p", "vebus", "257", "Alarms/L1/Overload", 1.0)
-        samples = samples_by_name(c, "victron_alarm")
+        samples = samples_by_name(c, "victron_phase_alarm")
         assert samples[0].labels["alarm"] == "Overload"
         assert samples[0].labels["phase"] == "1"
 
-    def test_alarm_and_phase_alarm_in_same_family(self):
-        """alarm() and phase_alarm() must share the same label set."""
+    def test_alarm_and_phase_alarm_are_different_families(self):
+        """alarm() and phase_alarm() must be separate metric families."""
         c = CCGXCollector()
         c.update("p", "vebus", "257", "Alarms/LowBattery", 0.0)
         c.update("p", "vebus", "257", "Alarms/L2/Overload", 0.0)
-        families = [f for f in c.collect() if f.name == "victron_alarm"]
-        assert len(families) == 1
-        assert len(families[0].samples) == 2
+        alarm_families = [f for f in c.collect() if f.name == "victron_alarm"]
+        phase_alarm_families = [
+            f for f in c.collect() if f.name == "victron_phase_alarm"
+        ]
+        assert len(alarm_families) == 1
+        assert len(phase_alarm_families) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -235,9 +254,74 @@ class TestValues:
         samples = samples_by_name(c, "victron_dc_battery_current")
         assert samples[0].value == pytest.approx(-12.5)
 
-    def test_empty_collector_yields_nothing(self):
+    def test_empty_collector_yields_only_internal_metrics(self):
         c = CCGXCollector()
-        assert list(c.collect()) == []
+        families = list(c.collect())
+        names = {f.name for f in families}
+        # Only the 3 internal MQTT metrics should be present
+        assert names == {
+            "victron_mqtt_connection_state",
+            "victron_mqtt_connection_state_since_time_seconds",
+            "victron_mqtt_subscription_updates",
+        }
+
+
+# ---------------------------------------------------------------------------
+# Internal MQTT metrics
+# ---------------------------------------------------------------------------
+
+
+class TestInternalMQTTMetrics:
+    def test_connection_state_default_disconnected(self):
+        c = CCGXCollector()
+        samples = samples_by_name(c, "victron_mqtt_connection_state")
+        assert samples[0].value == 0.0
+
+    def test_connection_state_after_connect(self):
+        c = CCGXCollector()
+        c.set_connection_state(True)
+        samples = samples_by_name(c, "victron_mqtt_connection_state")
+        assert samples[0].value == 1.0
+
+    def test_connection_state_after_disconnect(self):
+        c = CCGXCollector()
+        c.set_connection_state(True)
+        c.set_connection_state(False)
+        samples = samples_by_name(c, "victron_mqtt_connection_state")
+        assert samples[0].value == 0.0
+
+    def test_connection_since_updates_on_state_change(self):
+        c = CCGXCollector()
+        c.set_connection_state(True)
+        samples = samples_by_name(
+            c, "victron_mqtt_connection_state_since_time_seconds"
+        )
+        assert samples[0].value > 0.0
+
+    def test_subscription_updates_total_starts_at_zero(self):
+        c = CCGXCollector()
+        samples = samples_by_name(c, "victron_mqtt_subscription_updates")
+        assert samples[0].value == 0.0
+
+    def test_subscription_updates_incremented_on_update(self):
+        c = CCGXCollector()
+        c.update("p", "system", "0", "Dc/Battery/Voltage", 24.0)
+        c.update("p", "system", "0", "Dc/Battery/Voltage", 25.0)
+        samples = samples_by_name(c, "victron_mqtt_subscription_updates")
+        assert samples[0].value == 2.0
+
+    def test_subscription_updates_not_incremented_for_unknown_suffix(self):
+        c = CCGXCollector()
+        c.update("p", "system", "0", "Unknown/Path", 1.0)
+        samples = samples_by_name(c, "victron_mqtt_subscription_updates")
+        assert samples[0].value == 0.0
+
+    def test_internal_metrics_use_prefix(self):
+        c = CCGXCollector(prefix="custom_")
+        names = [f.name for f in c.collect()]
+        assert "custom_mqtt_connection_state" in names
+        assert "custom_mqtt_connection_state_since_time_seconds" in names
+        assert "custom_mqtt_subscription_updates" in names
 
 
 # ---------------------------------------------------------------------------
@@ -295,4 +379,7 @@ class TestThreadSafety:
         for t in threads:
             t.join()
 
-        assert len(list(c.collect())) == len(suffixes)
+        victron_families = [
+            f for f in c.collect() if not f.name.startswith("victron_mqtt_")
+        ]
+        assert len(victron_families) == len(suffixes)

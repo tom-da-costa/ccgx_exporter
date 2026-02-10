@@ -27,18 +27,21 @@ class CCGXMQTTClient:
         host: str,
         port: int,
         on_value: Callable[[str, str, str, str, float], None],
+        on_connection_change: Callable[[bool], None] | None = None,
     ) -> None:
         """
         Parameters
         ----------
-        host      : IP / hostname of the CCGX
-        port      : MQTT port (default 1883)
-        on_value  : callback(portal_id, service, instance, suffix, value)
-                    called for every numeric message received
+        host                : IP / hostname of the CCGX
+        port                : MQTT port (default 1883)
+        on_value            : callback(portal_id, service, instance, suffix, value)
+                              called for every numeric message received
+        on_connection_change: callback(connected) called when MQTT state changes
         """
         self._host = host
         self._port = port
         self._on_value = on_value
+        self._on_connection_change = on_connection_change
 
         self._portal_ids: set[str] = set()
         self._keepalive_timer: threading.Timer | None = None
@@ -78,9 +81,13 @@ class CCGXMQTTClient:
         logger.info("Connected to CCGX at %s:%d", self._host, self._port)
         client.subscribe("N/#")
         self._schedule_keepalive()
+        if self._on_connection_change:
+            self._on_connection_change(True)
 
     def _on_disconnect(self, client, userdata, rc) -> None:
         self._cancel_keepalive()
+        if self._on_connection_change:
+            self._on_connection_change(False)
         if rc != 0:
             logger.warning(
                 "Unexpected MQTT disconnect (rc=%d), will auto-reconnect", rc

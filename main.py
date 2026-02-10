@@ -91,6 +91,7 @@ def main(argv=None) -> None:
         host=args.host,
         port=args.mqtt_port,
         on_value=collector.update,
+        on_connection_change=collector.set_connection_state,
     )
 
     # Start the Prometheus HTTP server

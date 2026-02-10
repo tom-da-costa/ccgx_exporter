@@ -48,18 +48,17 @@ class TestAlarmHelper:
         labels = dict(m.fixed_labels)
         assert labels["alarm"] == "LowBattery"
 
-    def test_phase_label_empty_string(self):
-        """alarm() must include phase='' for label-set consistency with phase_alarm."""
+    def test_no_phase_label(self):
+        """alarm() must NOT include a phase label."""
         m = alarm("LowBattery")
         labels = dict(m.fixed_labels)
-        assert "phase" in labels
-        assert labels["phase"] == ""
+        assert "phase" not in labels
 
 
 class TestPhaseAlarmHelper:
-    def test_metric_name_is_alarm(self):
+    def test_metric_name_is_phase_alarm(self):
         m = phase_alarm("1", "Overload")
-        assert m.name == "alarm"
+        assert m.name == "phase_alarm"
 
     def test_alarm_and_phase_labels(self):
         m = phase_alarm("2", "HighTemperature")
@@ -67,13 +66,14 @@ class TestPhaseAlarmHelper:
         assert labels["alarm"] == "HighTemperature"
         assert labels["phase"] == "2"
 
-    def test_same_label_keys_as_alarm(self):
-        """phase_alarm and alarm must have identical label key sets."""
+    def test_different_label_keys_from_alarm(self):
+        """phase_alarm has a phase label that alarm does not."""
         m_alarm = alarm("LowBattery")
         m_phase = phase_alarm("1", "Overload")
-        assert {k for k, _ in m_alarm.fixed_labels} == {
-            k for k, _ in m_phase.fixed_labels
-        }
+        alarm_keys = {k for k, _ in m_alarm.fixed_labels}
+        phase_keys = {k for k, _ in m_phase.fixed_labels}
+        assert "phase" not in alarm_keys
+        assert "phase" in phase_keys
 
 
 # ---------------------------------------------------------------------------

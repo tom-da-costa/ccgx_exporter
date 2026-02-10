@@ -25,12 +25,11 @@ def counter(name: str, help: str, **labels) -> MetricDef:
 
 
 def alarm(alarm_name: str) -> MetricDef:
-    # Always include 'phase' for consistency with phaseAlarm entries
-    return MetricDef("alarm", "", "gauge", (("alarm", alarm_name), ("phase", "")))
+    return MetricDef("alarm", "0=OK; 1=Warning; 2=Alarm", "gauge", (("alarm", alarm_name),))
 
 
 def phase_alarm(phase: str, alarm_name: str) -> MetricDef:
-    return MetricDef("alarm", "", "gauge", (("alarm", alarm_name), ("phase", phase)))
+    return MetricDef("phase_alarm", "0=OK; 1=Warning; 2=Alarm", "gauge", (("alarm", alarm_name), ("phase", phase)))
 
 
 # Maps the D-Bus path suffix (after N/<portalId>/<service>/<instance>/) to a MetricDef.
@@ -265,7 +264,7 @@ TOPIC_MAP: dict[str, MetricDef] = {
     "Alarms/HighVoltageAcOut": alarm("HighVoltageAcOut"),
     "Ac/Out/P": gauge("ac_output_power_watts", "AC Output power"),
     "Ac/Out/L1/V": gauge(
-        "ac_output_phase_voltage_volts", "AC Output voltage", phase="1"
+        "ac_output_phase_volts", "AC Output voltage", phase="1"
     ),
     "Ac/Out/L1/I": gauge(
         "ac_output_phase_current_amps", "AC Output current", phase="1"
@@ -368,17 +367,17 @@ TOPIC_MAP: dict[str, MetricDef] = {
     ),
     "Ac/Energy/Reverse": gauge("ac_energy_reverse_kwh", ""),
     "Ac/Power": gauge("ac_power_watts", "Total power of all phases"),
-    "Ac/L1/Current": gauge("ac_phase_current_amps", "A AC", phase="1"),
+    "Ac/L1/Current": gauge("ac_phase_current", "A AC", phase="1"),
     "Ac/L1/Energy/Forward": gauge("ac_phase_energy_forward_kwh", "kWh", phase="1"),
     "Ac/L1/Energy/Reverse": gauge("ac_phase_energy_reverse_kwh", "", phase="1"),
     "Ac/L1/Power": gauge("ac_phase_power_watts", "W", phase="1"),
     "Ac/L1/Voltage": gauge("ac_phase_voltage_volts", "V AC", phase="1"),
-    "Ac/L2/Current": gauge("ac_phase_current_amps", "A AC", phase="2"),
+    "Ac/L2/Current": gauge("ac_phase_current", "A AC", phase="2"),
     "Ac/L2/Energy/Forward": gauge("ac_phase_energy_forward_kwh", "kWh", phase="2"),
     "Ac/L2/Energy/Reverse": gauge("ac_phase_energy_reverse_kwh", "", phase="2"),
     "Ac/L2/Power": gauge("ac_phase_power_watts", "W", phase="2"),
     "Ac/L2/Voltage": gauge("ac_phase_voltage_volts", "V AC", phase="2"),
-    "Ac/L3/Current": gauge("ac_phase_current_amps", "A AC", phase="3"),
+    "Ac/L3/Current": gauge("ac_phase_current", "A AC", phase="3"),
     "Ac/L3/Energy/Forward": gauge("ac_phase_energy_forward_kwh", "kWh", phase="3"),
     "Ac/L3/Energy/Reverse": gauge("ac_phase_energy_reverse_kwh", "", phase="3"),
     "Ac/L3/Power": gauge("ac_phase_power_watts", "W", phase="3"),

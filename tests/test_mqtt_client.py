@@ -169,6 +169,23 @@ class TestOnConnect:
         client._on_connect(mock_paho, None, None, rc=1)
         mock_paho.subscribe.assert_not_called()
 
+    def test_calls_on_connection_change_true_on_success(self):
+        cb = MagicMock()
+        client = CCGXMQTTClient(
+            host="h", port=1883, on_value=MagicMock(), on_connection_change=cb
+        )
+        client._schedule_keepalive = MagicMock()
+        client._on_connect(MagicMock(), None, None, rc=0)
+        cb.assert_called_once_with(True)
+
+    def test_does_not_call_on_connection_change_on_failure(self):
+        cb = MagicMock()
+        client = CCGXMQTTClient(
+            host="h", port=1883, on_value=MagicMock(), on_connection_change=cb
+        )
+        client._on_connect(MagicMock(), None, None, rc=1)
+        cb.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # _on_disconnect
@@ -187,6 +204,15 @@ class TestOnDisconnect:
         client._cancel_keepalive = MagicMock()
         client._on_disconnect(None, None, rc=1)
         client._cancel_keepalive.assert_called_once()
+
+    def test_calls_on_connection_change_false(self):
+        cb = MagicMock()
+        client = CCGXMQTTClient(
+            host="h", port=1883, on_value=MagicMock(), on_connection_change=cb
+        )
+        client._cancel_keepalive = MagicMock()
+        client._on_disconnect(None, None, rc=0)
+        cb.assert_called_once_with(False)
 
 
 # ---------------------------------------------------------------------------
