@@ -26,7 +26,7 @@ def counter(name: str, help: str, **labels) -> MetricDef:
 
 def alarm(alarm_name: str) -> MetricDef:
     return MetricDef(
-        "alarm", "0=OK; 1=Warning; 2=Alarm", "gauge", (("alarm", alarm_name),)
+        "alarm", "0=OK; 1=Warning; 2=Alarm", "gauge", (("alarm_type", alarm_name),)
     )
 
 
@@ -35,7 +35,7 @@ def phase_alarm(phase: str, alarm_name: str) -> MetricDef:
         "phase_alarm",
         "0=OK; 1=Warning; 2=Alarm",
         "gauge",
-        (("alarm", alarm_name), ("phase", phase)),
+        (("alarm_type", alarm_name), ("phase", phase)),
     )
 
 
@@ -405,8 +405,8 @@ TOPIC_MAP: dict[str, MetricDef] = {
     "Ac/In/CurrentLimit": gauge("ac_input_current_limit_amps", "A AC"),
     "NrOfOutputs": gauge("output_count", "The actual number of outputs"),
     # --- com.victronenergy.grid ---
-    "Ac/Grid/L1/Power": gauge("ac_grid_phase_power_watts", "", phase="1"),
-    "Ac/Grid/L2/Power": gauge("ac_grid_phase_power_watts", "", phase="2"),
-    "Ac/Grid/L3/Power": gauge("ac_grid_phase_power_watts", "", phase="3"),
+    "Ac/Grid/L1/Power": gauge("ac_grid_phase_power_watt", "", phase="1"),
+    "Ac/Grid/L2/Power": gauge("ac_grid_phase_power_watt", "", phase="2"),
+    "Ac/Grid/L3/Power": gauge("ac_grid_phase_power_watt", "", phase="3"),
     "Ac/Grid/NumberOfPhases": gauge("ac_grid_number_of_phases", ""),
 }

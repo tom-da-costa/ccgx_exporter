@@ -169,19 +169,20 @@ class TestLabels:
         c = CCGXCollector()
         c.update("p", "vebus", "257", "Alarms/LowBattery", 1.0)
         samples = samples_by_name(c, "victron_alarm")
-        assert samples[0].labels["alarm"] == "LowBattery"
+        assert samples[0].labels["alarm_type"] == "LowBattery"
 
     def test_alarm_has_no_phase_label(self):
         c = CCGXCollector()
         c.update("p", "vebus", "257", "Alarms/LowBattery", 1.0)
         samples = samples_by_name(c, "victron_alarm")
+        assert "alarm_type" in samples[0].labels
         assert "phase" not in samples[0].labels
 
     def test_phase_alarm_is_separate_metric(self):
         c = CCGXCollector()
         c.update("p", "vebus", "257", "Alarms/L1/Overload", 1.0)
         samples = samples_by_name(c, "victron_phase_alarm")
-        assert samples[0].labels["alarm"] == "Overload"
+        assert samples[0].labels["alarm_type"] == "Overload"
         assert samples[0].labels["phase"] == "1"
 
     def test_alarm_and_phase_alarm_are_different_families(self):
@@ -276,6 +277,7 @@ class TestInternalMQTTMetrics:
         c = CCGXCollector()
         samples = samples_by_name(c, "victron_mqtt_connection_state")
         assert samples[0].value == 0.0
+        assert samples[0].labels["client_id"] == "ccgx_exporter"
 
     def test_connection_state_after_connect(self):
         c = CCGXCollector()
@@ -320,6 +322,11 @@ class TestInternalMQTTMetrics:
         assert "custom_mqtt_connection_state" in names
         assert "custom_mqtt_connection_state_since_time_seconds" in names
         assert "custom_mqtt_subscription_updates" in names
+
+    def test_custom_client_id(self):
+        c = CCGXCollector(client_id="my_client")
+        samples = samples_by_name(c, "victron_mqtt_connection_state")
+        assert samples[0].labels["client_id"] == "my_client"
 
 
 # ---------------------------------------------------------------------------

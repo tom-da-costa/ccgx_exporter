@@ -46,12 +46,13 @@ class TestAlarmHelper:
     def test_alarm_label_set(self):
         m = alarm("LowBattery")
         labels = dict(m.fixed_labels)
-        assert labels["alarm"] == "LowBattery"
+        assert labels["alarm_type"] == "LowBattery"
 
     def test_no_phase_label(self):
         """alarm() must NOT include a phase label."""
         m = alarm("LowBattery")
         labels = dict(m.fixed_labels)
+        assert "alarm_type" in labels
         assert "phase" not in labels
 
 
@@ -63,7 +64,7 @@ class TestPhaseAlarmHelper:
     def test_alarm_and_phase_labels(self):
         m = phase_alarm("2", "HighTemperature")
         labels = dict(m.fixed_labels)
-        assert labels["alarm"] == "HighTemperature"
+        assert labels["alarm_type"] == "HighTemperature"
         assert labels["phase"] == "2"
 
     def test_different_label_keys_from_alarm(self):
@@ -72,7 +73,9 @@ class TestPhaseAlarmHelper:
         m_phase = phase_alarm("1", "Overload")
         alarm_keys = {k for k, _ in m_alarm.fixed_labels}
         phase_keys = {k for k, _ in m_phase.fixed_labels}
+        assert "alarm_type" in alarm_keys
         assert "phase" not in alarm_keys
+        assert "alarm_type" in phase_keys
         assert "phase" in phase_keys
 
 

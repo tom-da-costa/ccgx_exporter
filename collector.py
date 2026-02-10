@@ -19,8 +19,11 @@ from metrics import TOPIC_MAP, MetricDef
 
 
 class CCGXCollector:
-    def __init__(self, prefix: str = "victron_") -> None:
+    def __init__(
+        self, prefix: str = "victron_", client_id: str = "ccgx_exporter"
+    ) -> None:
         self._prefix = prefix if prefix.endswith("_") else prefix + "_"
+        self._client_id = client_id
         self._lock = threading.Lock()
         # key: (portal_id, component_type, component_id, suffix)
         # value: (numeric_value, MetricDef)
@@ -106,23 +109,29 @@ class CCGXCollector:
             yield fam
 
         # Internal MQTT metrics
+        client_labels = ["client_id"]
+        client_values = [self._client_id]
+
         conn_fam = GaugeMetricFamily(
             self._prefix + "mqtt_connection_state",
             "0=Disconnected; 1=Connected",
+            labels=client_labels,
         )
-        conn_fam.add_metric([], float(connected))
+        conn_fam.add_metric(client_values, float(connected))
         yield conn_fam
 
         since_fam = GaugeMetricFamily(
             self._prefix + "mqtt_connection_state_since_time_seconds",
             "Time since last change to mqtt_connection_state",
+            labels=client_labels,
         )
-        since_fam.add_metric([], connected_since)
+        since_fam.add_metric(client_values, connected_since)
         yield since_fam
 
         updates_fam = CounterMetricFamily(
             self._prefix + "mqtt_subscription_updates_total",
             "MQTT subscription updates received",
+            labels=client_labels,
         )
-        updates_fam.add_metric([], float(update_count))
+        updates_fam.add_metric(client_values, float(update_count))
         yield updates_fam

@@ -123,7 +123,11 @@ class CCGXMQTTClient:
 
     @staticmethod
     def _parse_value(payload: bytes) -> float | None:
-        """Return the numeric value from a Victron JSON payload, or None."""
+        """Return the numeric value from a Victron JSON payload, or None.
+
+        Returns float('nan') for JSON null values so they are emitted as NaN
+        in Prometheus (matching the old exporter behaviour for absent phases).
+        """
         try:
             data = json.loads(payload.decode("utf-8"))
         except Exception:
@@ -132,9 +136,12 @@ class CCGXMQTTClient:
         if not isinstance(data, dict):
             return None
 
-        raw = data.get("value")
-        if raw is None:
+        if "value" not in data:
             return None
+
+        raw = data["value"]
+        if raw is None:
+            return float("nan")
 
         try:
             return float(raw)

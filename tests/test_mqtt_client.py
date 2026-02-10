@@ -56,10 +56,16 @@ class TestParseValue:
     def test_valid_numeric(self, payload, expected):
         assert CCGXMQTTClient._parse_value(payload) == pytest.approx(expected)
 
+    def test_null_value_returns_nan(self):
+        import math
+
+        result = CCGXMQTTClient._parse_value(b'{"value": null}')
+        assert result is not None
+        assert math.isnan(result)
+
     @pytest.mark.parametrize(
         "payload",
         [
-            b'{"value": null}',
             b'{"value": "not_a_number"}',
             b'{"other_key": 1}',
             b"not json at all",
@@ -114,11 +120,15 @@ class TestOnMessage:
         client._on_message(None, None, msg)
         assert received == []
 
-    def test_null_value_not_dispatched(self):
+    def test_null_value_dispatched_as_nan(self):
+        import math
+
         client, received = self._make_client_with_spy()
         msg = make_message("N/abc/system/0/Dc/Battery/Voltage", {"value": None})
         client._on_message(None, None, msg)
-        assert received == []
+        assert len(received) == 1
+        assert received[0][:4] == ("abc", "system", "0", "Dc/Battery/Voltage")
+        assert math.isnan(received[0][4])
 
     def test_portal_id_registered_on_first_message(self):
         client, _ = self._make_client_with_spy()
