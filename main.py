@@ -15,6 +15,7 @@ import argparse
 import logging
 import signal
 import sys
+import threading
 
 from prometheus_client import start_http_server
 from prometheus_client.core import CollectorRegistry
@@ -34,7 +35,7 @@ DEFAULT_METRICS_PORT = 9877
 DEFAULT_LISTEN_ADDR = "0.0.0.0"
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(args=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Prometheus exporter for the Victron Color Control GX (CCGX)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -71,11 +72,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Enable debug logging",
     )
-    return parser.parse_args()
+    return parser.parse_args(args)
 
 
-def main() -> None:
-    args = parse_args()
+def main(argv=None) -> None:
+    args = parse_args(argv)
 
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
@@ -110,7 +111,7 @@ def main() -> None:
         sys.exit(1)
 
     # Block until SIGINT / SIGTERM
-    stop_event = __import__("threading").Event()
+    stop_event = threading.Event()
 
     def _shutdown(signum, frame):
         logger.info("Shutting down…")
