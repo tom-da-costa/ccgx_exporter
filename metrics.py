@@ -25,11 +25,18 @@ def counter(name: str, help: str, **labels) -> MetricDef:
 
 
 def alarm(alarm_name: str) -> MetricDef:
-    return MetricDef("alarm", "0=OK; 1=Warning; 2=Alarm", "gauge", (("alarm", alarm_name),))
+    return MetricDef(
+        "alarm", "0=OK; 1=Warning; 2=Alarm", "gauge", (("alarm", alarm_name),)
+    )
 
 
 def phase_alarm(phase: str, alarm_name: str) -> MetricDef:
-    return MetricDef("phase_alarm", "0=OK; 1=Warning; 2=Alarm", "gauge", (("alarm", alarm_name), ("phase", phase)))
+    return MetricDef(
+        "phase_alarm",
+        "0=OK; 1=Warning; 2=Alarm",
+        "gauge",
+        (("alarm", alarm_name), ("phase", phase)),
+    )
 
 
 # Maps the D-Bus path suffix (after N/<portalId>/<service>/<instance>/) to a MetricDef.
@@ -263,9 +270,7 @@ TOPIC_MAP: dict[str, MetricDef] = {
     "Alarms/LowVoltageAcOut": alarm("LowVoltageAcOut"),
     "Alarms/HighVoltageAcOut": alarm("HighVoltageAcOut"),
     "Ac/Out/P": gauge("ac_output_power_watts", "AC Output power"),
-    "Ac/Out/L1/V": gauge(
-        "ac_output_phase_volts", "AC Output voltage", phase="1"
-    ),
+    "Ac/Out/L1/V": gauge("ac_output_phase_volts", "AC Output voltage", phase="1"),
     "Ac/Out/L1/I": gauge(
         "ac_output_phase_current_amps", "AC Output current", phase="1"
     ),

@@ -293,9 +293,7 @@ class TestInternalMQTTMetrics:
     def test_connection_since_updates_on_state_change(self):
         c = CCGXCollector()
         c.set_connection_state(True)
-        samples = samples_by_name(
-            c, "victron_mqtt_connection_state_since_time_seconds"
-        )
+        samples = samples_by_name(c, "victron_mqtt_connection_state_since_time_seconds")
         assert samples[0].value > 0.0
 
     def test_subscription_updates_total_starts_at_zero(self):
