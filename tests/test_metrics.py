@@ -71,7 +71,9 @@ class TestPhaseAlarmHelper:
         """phase_alarm and alarm must have identical label key sets."""
         m_alarm = alarm("LowBattery")
         m_phase = phase_alarm("1", "Overload")
-        assert {k for k, _ in m_alarm.fixed_labels} == {k for k, _ in m_phase.fixed_labels}
+        assert {k for k, _ in m_alarm.fixed_labels} == {
+            k for k, _ in m_phase.fixed_labels
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -90,10 +92,13 @@ class TestTopicMap:
     def test_all_metric_types_valid(self):
         valid = {"gauge", "counter"}
         for key, mdef in TOPIC_MAP.items():
-            assert mdef.metric_type in valid, f"{key} has invalid type {mdef.metric_type!r}"
+            assert mdef.metric_type in valid, (
+                f"{key} has invalid type {mdef.metric_type!r}"
+            )
 
     def test_all_names_are_snake_case(self):
         import re
+
         pattern = re.compile(r"^[a-z][a-z0-9_]*$")
         for key, mdef in TOPIC_MAP.items():
             assert pattern.match(mdef.name), (

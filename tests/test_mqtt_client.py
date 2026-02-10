@@ -1,8 +1,7 @@
 """Tests for mqtt_client.py — CCGXMQTTClient."""
 
 import json
-import threading
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -18,7 +17,9 @@ def make_client(on_value=None):
     """Return a CCGXMQTTClient with a mocked paho client and a capture callback."""
     received = []
     if on_value is None:
-        on_value = lambda *args: received.append(args)
+
+        def on_value(*args):
+            received.append(args)
 
     with patch("mqtt_client.mqtt.Client") as mock_mqtt_cls:
         mock_paho = MagicMock()
@@ -136,7 +137,9 @@ class TestOnMessage:
     def test_multiple_portals_tracked(self):
         client, _ = self._make_client_with_spy()
         for portal in ("p1", "p2", "p3"):
-            msg = make_message(f"N/{portal}/system/0/Dc/Battery/Voltage", {"value": 1.0})
+            msg = make_message(
+                f"N/{portal}/system/0/Dc/Battery/Voltage", {"value": 1.0}
+            )
             client._on_message(None, None, msg)
         assert client._portal_ids == {"p1", "p2", "p3"}
 

@@ -3,7 +3,6 @@
 import json
 import threading
 import time
-from http.client import HTTPConnection
 from io import BytesIO
 from unittest.mock import MagicMock, patch
 
@@ -14,7 +13,6 @@ from api_server import (
     DEFAULT_CCGX_HOST,
     DEFAULT_LISTEN_ADDR,
     DEFAULT_MQTT_PORT,
-    TopicEntry,
     TopicStore,
     _make_handler,
     main,
@@ -416,12 +414,6 @@ class TestMain:
     def _run_main(self, extra_args=None):
         """Run main() with all network calls patched, then trigger shutdown."""
         args = ["--host", "1.2.3.4"] + (extra_args or [])
-
-        stop_event_holder = {}
-
-        def fake_wait_stop_event():
-            # Capture the real stop_event so we can set it immediately
-            pass
 
         with (
             patch("api_server.CCGXMQTTClient") as mock_mqtt_cls,
