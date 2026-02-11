@@ -1,6 +1,6 @@
 [project]
 name = "ccgx-exporter"
-version = "0.2.0"
+version = "0.3.0"
 description = "Prometheus exporter for the Victron Color Control GX (CCGX) via MQTT"
 license = { file = "LICENSE" }
 readme = "README.md"
