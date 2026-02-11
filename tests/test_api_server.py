@@ -11,8 +11,10 @@ import pytest
 from api_server import (
     DEFAULT_API_PORT,
     DEFAULT_CCGX_HOST,
+    DEFAULT_CLIENT_ID,
     DEFAULT_LISTEN_ADDR,
     DEFAULT_MQTT_PORT,
+    ESS_MIN_SOC_PATH,
     TopicStore,
     _make_handler,
     main,
@@ -36,19 +38,25 @@ def make_store(*entries: tuple) -> TopicStore:
 class FakeHTTPRequest:
     """Minimal fake to drive BaseHTTPRequestHandler without a real socket."""
 
-    def __init__(self, path: str):
+    def __init__(self, path: str, body: bytes = b""):
         self.path = path
+        self._body = body
         self._response_status: int | None = None
         self._response_headers: dict[str, str] = {}
         self._response_body: bytes = b""
         self._wfile = BytesIO()
 
-    def _build_handler(self, store: TopicStore):
-        Handler = _make_handler(store)
+    def _build_handler(self, store: TopicStore, mqtt_client=None):
+        Handler = _make_handler(store, mqtt_client)
 
         handler = Handler.__new__(Handler)
         handler.path = self.path
         handler.wfile = self._wfile
+        handler.rfile = BytesIO(self._body)
+
+        # Fake headers providing Content-Length
+        fake_headers = {"Content-Length": str(len(self._body))}
+        handler.headers = fake_headers
 
         # Capture send_response / send_header / end_headers calls
         def send_response(status, message=None):
@@ -72,9 +80,27 @@ class FakeHTTPRequest:
         body = json.loads(self._wfile.getvalue())
         return self._response_status, self._response_headers, body
 
+    def post(
+        self, store: TopicStore, mqtt_client=None
+    ) -> tuple[int, dict, dict | list]:
+        handler = self._build_handler(store, mqtt_client)
+        handler.do_POST()
+        body = json.loads(self._wfile.getvalue())
+        return self._response_status, self._response_headers, body
+
 
 def get(path: str, store: TopicStore) -> tuple[int, dict, dict | list]:
     return FakeHTTPRequest(path).get(store)
+
+
+def post(
+    path: str,
+    body: dict,
+    store: TopicStore,
+    mqtt_client=None,
+) -> tuple[int, dict, dict | list]:
+    encoded = json.dumps(body).encode("utf-8")
+    return FakeHTTPRequest(path, encoded).post(store, mqtt_client)
 
 
 # ---------------------------------------------------------------------------
@@ -502,6 +528,7 @@ class TestParseArgs:
         assert args.mqtt_port == DEFAULT_MQTT_PORT
         assert args.api_port == DEFAULT_API_PORT
         assert args.listen_address == DEFAULT_LISTEN_ADDR
+        assert args.client_id == DEFAULT_CLIENT_ID
         assert args.debug is False
 
     def test_custom_host(self):
@@ -517,6 +544,104 @@ class TestParseArgs:
         args = parse_args(["--listen-address", "127.0.0.1"])
         assert args.listen_address == "127.0.0.1"
 
+    def test_custom_client_id(self):
+        args = parse_args(["--client-id", "my_api"])
+        assert args.client_id == "my_api"
+
     def test_debug_flag(self):
         args = parse_args(["--debug"])
         assert args.debug is True
+
+
+# ---------------------------------------------------------------------------
+# HTTP handler — POST /ess/min-soc
+# ---------------------------------------------------------------------------
+
+
+class TestHandlerEssMinSoc:
+    def _mqtt(self):
+        from unittest.mock import MagicMock
+
+        return MagicMock()
+
+    def test_sets_value_publishes_to_mqtt(self):
+        store = make_store(("p1", "system", "0", "Dc/Battery/Soc", 80.0))
+        mqtt = self._mqtt()
+        status, _, body = post("/ess/min-soc", {"value": 20}, store, mqtt)
+        assert status == 200
+        mqtt.publish_value.assert_called_once_with(
+            "p1", "settings", "0", ESS_MIN_SOC_PATH, 20.0
+        )
+
+    def test_response_body(self):
+        store = make_store(("p1", "system", "0", "Dc/Battery/Soc", 80.0))
+        _, _, body = post("/ess/min-soc", {"value": 35}, store, self._mqtt())
+        assert body["portal_id"] == "p1"
+        assert body["value"] == 35.0
+        assert body["path"] == ESS_MIN_SOC_PATH
+
+    def test_explicit_portal_id(self):
+        store = make_store(
+            ("p1", "system", "0", "Dc/Battery/Soc", 80.0),
+            ("p2", "system", "0", "Dc/Battery/Soc", 60.0),
+        )
+        mqtt = self._mqtt()
+        status, _, body = post(
+            "/ess/min-soc", {"value": 10, "portal_id": "p2"}, store, mqtt
+        )
+        assert status == 200
+        mqtt.publish_value.assert_called_once_with(
+            "p2", "settings", "0", ESS_MIN_SOC_PATH, 10.0
+        )
+
+    def test_multiple_portals_without_portal_id_returns_400(self):
+        store = make_store(
+            ("p1", "system", "0", "Dc/Battery/Soc", 80.0),
+            ("p2", "system", "0", "Dc/Battery/Soc", 60.0),
+        )
+        status, _, body = post("/ess/min-soc", {"value": 20}, store, self._mqtt())
+        assert status == 400
+        assert "portal_id" in body["error"]
+        assert "portals" in body
+
+    def test_no_portal_known_returns_503(self):
+        status, _, body = post(
+            "/ess/min-soc", {"value": 20}, TopicStore(), self._mqtt()
+        )
+        assert status == 503
+
+    def test_missing_value_field_returns_400(self):
+        store = make_store(("p1", "system", "0", "Dc/Battery/Soc", 80.0))
+        status, _, body = post("/ess/min-soc", {}, store, self._mqtt())
+        assert status == 400
+        assert "value" in body["error"]
+
+    def test_value_above_100_returns_400(self):
+        store = make_store(("p1", "system", "0", "Dc/Battery/Soc", 80.0))
+        status, _, body = post("/ess/min-soc", {"value": 101}, store, self._mqtt())
+        assert status == 400
+
+    def test_value_below_0_returns_400(self):
+        store = make_store(("p1", "system", "0", "Dc/Battery/Soc", 80.0))
+        status, _, body = post("/ess/min-soc", {"value": -1}, store, self._mqtt())
+        assert status == 400
+
+    def test_non_numeric_value_returns_400(self):
+        store = make_store(("p1", "system", "0", "Dc/Battery/Soc", 80.0))
+        status, _, body = post("/ess/min-soc", {"value": "high"}, store, self._mqtt())
+        assert status == 400
+
+    def test_invalid_json_returns_400(self):
+        store = make_store(("p1", "system", "0", "Dc/Battery/Soc", 80.0))
+        raw = FakeHTTPRequest("/ess/min-soc", b"not-json").post(store, self._mqtt())
+        assert raw[0] == 400
+
+    def test_no_mqtt_client_returns_503(self):
+        store = make_store(("p1", "system", "0", "Dc/Battery/Soc", 80.0))
+        status, _, body = post("/ess/min-soc", {"value": 20}, store, mqtt_client=None)
+        assert status == 503
+
+    def test_unknown_post_route_returns_404(self):
+        store = make_store(("p1", "system", "0", "Dc/Battery/Soc", 80.0))
+        status, _, body = post("/unknown", {"value": 20}, store, self._mqtt())
+        assert status == 404

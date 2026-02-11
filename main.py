@@ -33,6 +33,7 @@ DEFAULT_CCGX_HOST = "192.168.1.210"
 DEFAULT_MQTT_PORT = 1883
 DEFAULT_METRICS_PORT = 9877
 DEFAULT_LISTEN_ADDR = "0.0.0.0"
+DEFAULT_CLIENT_ID = "ccgx_exporter"
 
 
 def parse_args(args=None) -> argparse.Namespace:
@@ -68,6 +69,11 @@ def parse_args(args=None) -> argparse.Namespace:
         help="Prefix for all Prometheus metric names",
     )
     parser.add_argument(
+        "--client-id",
+        default=DEFAULT_CLIENT_ID,
+        help="MQTT client identifier (must be unique per broker)",
+    )
+    parser.add_argument(
         "--debug",
         action="store_true",
         help="Enable debug logging",
@@ -84,7 +90,7 @@ def main(argv=None) -> None:
     # Use a dedicated registry so the default Go-style process metrics
     # (gc, memory, …) are not included.
     registry = CollectorRegistry()
-    collector = CCGXCollector(prefix=args.prefix)
+    collector = CCGXCollector(prefix=args.prefix, client_id=args.client_id)
     registry.register(collector)
 
     mqtt_client = CCGXMQTTClient(
@@ -92,6 +98,7 @@ def main(argv=None) -> None:
         port=args.mqtt_port,
         on_value=collector.update,
         on_connection_change=collector.set_connection_state,
+        client_id=args.client_id,
     )
 
     # Start the Prometheus HTTP server

@@ -8,6 +8,7 @@ import pytest
 
 from main import (
     DEFAULT_CCGX_HOST,
+    DEFAULT_CLIENT_ID,
     DEFAULT_LISTEN_ADDR,
     DEFAULT_METRICS_PORT,
     DEFAULT_MQTT_PORT,
@@ -29,6 +30,7 @@ class TestParseArgs:
         assert args.metrics_port == DEFAULT_METRICS_PORT
         assert args.listen_address == DEFAULT_LISTEN_ADDR
         assert args.prefix == "victron_"
+        assert args.client_id == DEFAULT_CLIENT_ID
         assert args.debug is False
 
     def test_custom_host(self):
@@ -50,6 +52,10 @@ class TestParseArgs:
     def test_custom_prefix(self):
         args = parse_args(["--prefix", "myccgx_"])
         assert args.prefix == "myccgx_"
+
+    def test_custom_client_id(self):
+        args = parse_args(["--client-id", "my_exporter"])
+        assert args.client_id == "my_exporter"
 
     def test_debug_flag(self):
         args = parse_args(["--debug"])
@@ -125,7 +131,9 @@ class TestMain:
             mock_collector_cls.return_value = MagicMock()
             main(["--host", "1.2.3.4", "--prefix", "custom_"])
 
-        mock_collector_cls.assert_called_once_with(prefix="custom_")
+        mock_collector_cls.assert_called_once_with(
+            prefix="custom_", client_id="ccgx_exporter"
+        )
 
     def test_connect_failure_exits(self):
         with (

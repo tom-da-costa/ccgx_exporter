@@ -6,15 +6,22 @@ values via a simple HTTP/JSON API.
 
 Endpoints
 ---------
-GET /values/<service>/<instance>/<path>   Latest value for that topic
-GET /values                               All known topics + values
-GET /portals                              Known portal IDs
+GET  /values/<service>/<instance>/<path>   Latest value for that topic
+GET  /values                               All known topics + values
+GET  /portals                              Known portal IDs
+POST /ess/min-soc                          Set ESS minimum SOC (0–100 %)
+
+POST /ess/min-soc body (JSON)
+-----------------------------
+    {"value": 20}              # use the only known portal
+    {"value": 20, "portal_id": "abc123"}  # specify portal explicitly
 
 Examples
 --------
-    GET http://server:4756/values/vebus/257/Ac/Out/L1/P
-    GET http://server:4756/values/system/0/Dc/Battery/Soc
-    GET http://server:4756/values
+    GET  http://server:4756/values/vebus/257/Ac/Out/L1/P
+    GET  http://server:4756/values/system/0/Dc/Battery/Soc
+    GET  http://server:4756/values
+    POST http://server:4756/ess/min-soc   body: {"value": 20}
 
 Usage
 -----
@@ -45,6 +52,7 @@ DEFAULT_CCGX_HOST = "192.168.1.210"
 DEFAULT_MQTT_PORT = 1883
 DEFAULT_API_PORT = 4756
 DEFAULT_LISTEN_ADDR = "0.0.0.0"
+DEFAULT_CLIENT_ID = "ccgx_api_server"
 
 
 # ---------------------------------------------------------------------------
@@ -120,7 +128,10 @@ def _json_response(handler: BaseHTTPRequestHandler, status: int, data) -> None:
     handler.wfile.write(body)
 
 
-def _make_handler(store: TopicStore):
+ESS_MIN_SOC_PATH = "Settings/CGwacs/BatteryLife/MinimumSocLimit"
+
+
+def _make_handler(store: TopicStore, mqtt_client=None):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
             logger.debug("HTTP %s", fmt % args)
@@ -193,6 +204,70 @@ def _make_handler(store: TopicStore):
 
             _json_response(self, 404, {"error": "not found"})
 
+        def do_POST(self):
+            parsed = urlparse(self.path)
+            parts = parsed.path.strip("/").split("/")
+
+            # POST /ess/min-soc
+            if parts == ["ess", "min-soc"]:
+                self._handle_set_min_soc()
+                return
+
+            _json_response(self, 404, {"error": "not found"})
+
+        def _handle_set_min_soc(self):
+            # Read and parse JSON body
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                body = json.loads(self.rfile.read(length))
+            except Exception:
+                _json_response(self, 400, {"error": "invalid JSON body"})
+                return
+
+            # Validate value
+            if "value" not in body:
+                _json_response(self, 400, {"error": "missing field: value"})
+                return
+            try:
+                soc = float(body["value"])
+            except (TypeError, ValueError):
+                _json_response(self, 400, {"error": "value must be a number"})
+                return
+            if not (0.0 <= soc <= 100.0):
+                _json_response(self, 400, {"error": "value must be between 0 and 100"})
+                return
+
+            # Resolve portal_id
+            portal_id = body.get("portal_id")
+            if portal_id is None:
+                portals = store.portals()
+                if not portals:
+                    _json_response(self, 503, {"error": "no portal known yet"})
+                    return
+                if len(portals) > 1:
+                    _json_response(
+                        self,
+                        400,
+                        {
+                            "error": "multiple portals known; specify portal_id",
+                            "portals": portals,
+                        },
+                    )
+                    return
+                portal_id = portals[0]
+
+            if mqtt_client is None:
+                _json_response(self, 503, {"error": "MQTT client not available"})
+                return
+
+            mqtt_client.publish_value(portal_id, "settings", "0", ESS_MIN_SOC_PATH, soc)
+            logger.info("Set ESS min SOC to %.1f%% for portal %s", soc, portal_id)
+            _json_response(
+                self,
+                200,
+                {"portal_id": portal_id, "path": ESS_MIN_SOC_PATH, "value": soc},
+            )
+
     return Handler
 
 
@@ -229,6 +304,11 @@ def parse_args(args=None) -> argparse.Namespace:
         help="TCP port for the HTTP API",
     )
     parser.add_argument(
+        "--client-id",
+        default=DEFAULT_CLIENT_ID,
+        help="MQTT client identifier (must be unique per broker)",
+    )
+    parser.add_argument(
         "--debug",
         action="store_true",
         help="Enable debug logging",
@@ -248,6 +328,7 @@ def main(argv=None) -> None:
         host=args.host,
         port=args.mqtt_port,
         on_value=store.update,
+        client_id=args.client_id,
     )
 
     try:
@@ -259,7 +340,7 @@ def main(argv=None) -> None:
         sys.exit(1)
 
     http_server = ThreadingHTTPServer(
-        (args.listen_address, args.api_port), _make_handler(store)
+        (args.listen_address, args.api_port), _make_handler(store, mqtt_client)
     )
     http_thread = threading.Thread(target=http_server.serve_forever, daemon=True)
     http_thread.start()

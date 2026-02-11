@@ -28,6 +28,7 @@ class CCGXMQTTClient:
         port: int,
         on_value: Callable[[str, str, str, str, float], None],
         on_connection_change: Callable[[bool], None] | None = None,
+        client_id: str = "ccgx_exporter",
     ) -> None:
         """
         Parameters
@@ -37,6 +38,7 @@ class CCGXMQTTClient:
         on_value            : callback(portal_id, service, instance, suffix, value)
                               called for every numeric message received
         on_connection_change: callback(connected) called when MQTT state changes
+        client_id           : MQTT client identifier (must be unique per broker)
         """
         self._host = host
         self._port = port
@@ -47,7 +49,7 @@ class CCGXMQTTClient:
         self._keepalive_timer: threading.Timer | None = None
 
         self._client = mqtt.Client(
-            client_id="ccgx_exporter",
+            client_id=client_id,
             clean_session=True,
         )
         self._client.on_connect = self._on_connect
@@ -69,6 +71,24 @@ class CCGXMQTTClient:
         self._cancel_keepalive()
         self._client.loop_stop()
         self._client.disconnect()
+
+    def publish_value(
+        self,
+        portal_id: str,
+        service: str,
+        instance: str,
+        suffix: str,
+        value: float,
+    ) -> None:
+        """Write a value to a D-Bus path via MQTT.
+
+        Publishes to W/<portalId>/<service>/<instance>/<suffix> with payload
+        ``{"value": <value>}``.
+        """
+        topic = f"W/{portal_id}/{service}/{instance}/{suffix}"
+        payload = json.dumps({"value": value})
+        self._client.publish(topic, payload=payload, qos=0, retain=False)
+        logger.debug("Published %s -> %s", topic, payload)
 
     # ------------------------------------------------------------------
     # MQTT callbacks (run in the paho network thread)

@@ -282,3 +282,27 @@ class TestKeepalive:
         with patch("mqtt_client.threading.Timer", return_value=MagicMock()):
             client._schedule_keepalive()
         existing.cancel.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# publish_value
+# ---------------------------------------------------------------------------
+
+
+class TestPublishValue:
+    def test_publishes_to_write_topic(self):
+        client, _ = make_client()
+        client.publish_value("abc", "settings", "0", "Settings/Foo/Bar", 42.0)
+        client._client.publish.assert_called_once_with(
+            "W/abc/settings/0/Settings/Foo/Bar",
+            payload='{"value": 42.0}',
+            qos=0,
+            retain=False,
+        )
+
+    def test_payload_value_serialised(self):
+        client, _ = make_client()
+        client.publish_value("p1", "settings", "0", "Settings/Foo/Bar", 20.0)
+        _, kwargs = client._client.publish.call_args
+        payload = json.loads(kwargs["payload"])
+        assert payload["value"] == 20.0
